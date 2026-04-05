@@ -1,0 +1,933 @@
+{
+  "id": "0fcc7cf0-8500-4a69-a203-080229078f1a",
+  "prevId": "2661749f-3a05-492f-94fb-f3965a3c8429",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.anamnesis": {
+      "name": "anamnesis",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "studentId": {
+          "name": "studentId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "block1Completed": {
+          "name": "block1Completed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "block2Completed": {
+          "name": "block2Completed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "block3Completed": {
+          "name": "block3Completed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "block4Completed": {
+          "name": "block4Completed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "guardianName": {
+          "name": "guardianName",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "guardianContactWhatsapp": {
+          "name": "guardianContactWhatsapp",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "guardianContactEmail": {
+          "name": "guardianContactEmail",
+          "type": "varchar(320)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "conditions": {
+          "name": "conditions",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "readingLevel": {
+          "name": "readingLevel",
+          "type": "readingLevel",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "writingLevel": {
+          "name": "writingLevel",
+          "type": "writingLevel",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "observations": {
+          "name": "observations",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "favoriteMovies": {
+          "name": "favoriteMovies",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "favoriteMusic": {
+          "name": "favoriteMusic",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "favoriteSports": {
+          "name": "favoriteSports",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "favoriteFoods": {
+          "name": "favoriteFoods",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "favoriteAnimations": {
+          "name": "favoriteAnimations",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "otherInterests": {
+          "name": "otherInterests",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prohibitedThemes": {
+          "name": "prohibitedThemes",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "subjects": {
+          "name": "subjects",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.chatMessages": {
+      "name": "chatMessages",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "studentId": {
+          "name": "studentId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "messageType": {
+          "name": "messageType",
+          "type": "messageType",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "contentType": {
+          "name": "contentType",
+          "type": "contentType",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "imageUrl": {
+          "name": "imageUrl",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "audioUrl": {
+          "name": "audioUrl",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "isComprehended": {
+          "name": "isComprehended",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "comprehensionScore": {
+          "name": "comprehensionScore",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "subjectTopic": {
+          "name": "subjectTopic",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "versionNumber": {
+          "name": "versionNumber",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "previousVersionId": {
+          "name": "previousVersionId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.colorPalettes": {
+      "name": "colorPalettes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "primaryColor": {
+          "name": "primaryColor",
+          "type": "varchar(7)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "secondaryColor": {
+          "name": "secondaryColor",
+          "type": "varchar(7)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "backgroundColor": {
+          "name": "backgroundColor",
+          "type": "varchar(7)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "textColor": {
+          "name": "textColor",
+          "type": "varchar(7)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "isDefault": {
+          "name": "isDefault",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.lgpdAcceptanceLogs": {
+      "name": "lgpdAcceptanceLogs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "userId": {
+          "name": "userId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "schoolId": {
+          "name": "schoolId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "acceptanceType": {
+          "name": "acceptanceType",
+          "type": "acceptanceType",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ipAddress": {
+          "name": "ipAddress",
+          "type": "varchar(45)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "userAgent": {
+          "name": "userAgent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.moderationLogs": {
+      "name": "moderationLogs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "studentId": {
+          "name": "studentId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "messageId": {
+          "name": "messageId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "violationType": {
+          "name": "violationType",
+          "type": "violationType",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "warningCount": {
+          "name": "warningCount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actionTaken": {
+          "name": "actionTaken",
+          "type": "actionTaken",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "guardianNotified": {
+          "name": "guardianNotified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "adminNotified": {
+          "name": "adminNotified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "adminActionRequired": {
+          "name": "adminActionRequired",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "adminActionTakenAt": {
+          "name": "adminActionTakenAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.schools": {
+      "name": "schools",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "adminId": {
+          "name": "adminId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "logoUrl": {
+          "name": "logoUrl",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "colorPalette": {
+          "name": "colorPalette",
+          "type": "colorPalette",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'azul_serenidade'"
+        },
+        "customColorHex": {
+          "name": "customColorHex",
+          "type": "varchar(7)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lgpdAccepted": {
+          "name": "lgpdAccepted",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "lgpdAcceptedAt": {
+          "name": "lgpdAcceptedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "isActive": {
+          "name": "isActive",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.students": {
+      "name": "students",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "userId": {
+          "name": "userId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "schoolId": {
+          "name": "schoolId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "series": {
+          "name": "series",
+          "type": "series",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "teacherId": {
+          "name": "teacherId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "personaName": {
+          "name": "personaName",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avatarStyle": {
+          "name": "avatarStyle",
+          "type": "avatarStyle",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "preferredSubjects": {
+          "name": "preferredSubjects",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "enemEnabled": {
+          "name": "enemEnabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "moderationWarnings": {
+          "name": "moderationWarnings",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "blockedAt": {
+          "name": "blockedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.users": {
+      "name": "users",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "openId": {
+          "name": "openId",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(320)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "loginMethod": {
+          "name": "loginMethod",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "role": {
+          "name": "role",
+          "type": "role",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'student'"
+        },
+        "schoolId": {
+          "name": "schoolId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "groupAccess": {
+          "name": "groupAccess",
+          "type": "groupAccess",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "loginUsername": {
+          "name": "loginUsername",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "loginPasswordHash": {
+          "name": "loginPasswordHash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "firstName": {
+          "name": "firstName",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "birthDate": {
+          "name": "birthDate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lgpdAccepted": {
+          "name": "lgpdAccepted",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "lgpdAcceptedAt": {
+          "name": "lgpdAcceptedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "activation_token": {
+          "name": "activation_token",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "activation_token_expires": {
+          "name": "activation_token_expires",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "lastSignedIn": {
+          "name": "lastSignedIn",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.acceptanceType": {
+      "name": "acceptanceType",
+      "schema": "public",
+      "values": [
+        "school",
+        "teacher",
+        "guardian",
+        "student"
+      ]
+    },
+    "public.actionTaken": {
+      "name": "actionTaken",
+      "schema": "public",
+      "values": [
+        "warning",
+        "blocked"
+      ]
+    },
+    "public.avatarStyle": {
+      "name": "avatarStyle",
+      "schema": "public",
+      "values": [
+        "manga",
+        "pixar",
+        "android"
+      ]
+    },
+    "public.colorPalette": {
+      "name": "colorPalette",
+      "schema": "public",
+      "values": [
+        "azul_serenidade",
+        "verde_natureza",
+        "roxo_criativo",
+        "laranja_energia",
+        "personalizada"
+      ]
+    },
+    "public.contentType": {
+      "name": "contentType",
+      "schema": "public",
+      "values": [
+        "text",
+        "image",
+        "audio"
+      ]
+    },
+    "public.groupAccess": {
+      "name": "groupAccess",
+      "schema": "public",
+      "values": [
+        "reads_writes",
+        "non_reads_writes"
+      ]
+    },
+    "public.messageType": {
+      "name": "messageType",
+      "schema": "public",
+      "values": [
+        "student_input",
+        "ai_response"
+      ]
+    },
+    "public.readingLevel": {
+      "name": "readingLevel",
+      "schema": "public",
+      "values": [
+        "non_reader",
+        "reads_with_difficulty",
+        "reads_well"
+      ]
+    },
+    "public.role": {
+      "name": "role",
+      "schema": "public",
+      "values": [
+        "super_admin",
+        "admin_school",
+        "teacher",
+        "student"
+      ]
+    },
+    "public.series": {
+      "name": "series",
+      "schema": "public",
+      "values": [
+        "1º_ano",
+        "2º_ano",
+        "3º_ano"
+      ]
+    },
+    "public.status": {
+      "name": "status",
+      "schema": "public",
+      "values": [
+        "active",
+        "blocked",
+        "pending_approval"
+      ]
+    },
+    "public.violationType": {
+      "name": "violationType",
+      "schema": "public",
+      "values": [
+        "inappropriate_image",
+        "other"
+      ]
+    },
+    "public.writingLevel": {
+      "name": "writingLevel",
+      "schema": "public",
+      "values": [
+        "non_writer",
+        "writes_with_difficulty",
+        "writes_well"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

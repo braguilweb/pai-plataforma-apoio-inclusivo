@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1774979840690,
+      "tag": "0000_serious_mother_askani",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1774980140590,
+      "tag": "0001_eminent_ben_urich",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1775086020083,
+      "tag": "0002_empty_starbolt",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1775324607110,
+      "tag": "0003_serious_wrecking_crew",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1775333052525,
+      "tag": "0004_greedy_scorpion",
+      "breakpoints": true
+    }
+  ]
+}
