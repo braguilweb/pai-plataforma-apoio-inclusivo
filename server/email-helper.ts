@@ -187,7 +187,7 @@ function buildCtaButton(
  * @param schoolName     - Nome da escola recém-cadastrada
  * @param adminName      - Nome do administrador da escola
  * @param adminEmail     - E-mail do administrador (destinatário)
- * @param activationLink - Link gerado com token para definição de senha
+ * @param activationLink - Link gerado com token de ativação
  *                         Expira em 24 horas.
  */
 export async function sendSchoolCreatedConfirmation({
@@ -199,7 +199,7 @@ export async function sendSchoolCreatedConfirmation({
   schoolName: string;
   adminName: string;
   adminEmail: string;
-  activationLink: string; // NOVO: link com token de ativação
+  activationLink: string;
 }): Promise<{ success: boolean; error?: string }> {
   const resend = getResendClient();
 
@@ -207,7 +207,6 @@ export async function sendSchoolCreatedConfirmation({
     return { success: false, error: "Serviço de e-mail não configurado." };
   }
 
-  // Conteúdo específico deste e-mail
   const content = `
     <h2 style="color: #111827; margin-top: 0; font-size: 20px;">
       Bem-vindo(a) à Plataforma PAI! 🎉
@@ -227,10 +226,8 @@ export async function sendSchoolCreatedConfirmation({
       clique no botão abaixo:
     </p>
 
-    <!-- Botão de ativação -->
     ${buildCtaButton(activationLink, "✅ Ativar minha conta e definir senha")}
 
-    <!-- Link alternativo (fallback para clientes de e-mail que bloqueiam botões) -->
     <p style="color: #6B7280; font-size: 13px; margin: 0 0 4px;">
       Se o botão não funcionar, copie e cole o link abaixo no seu navegador:
     </p>
@@ -240,7 +237,6 @@ export async function sendSchoolCreatedConfirmation({
       </a>
     </p>
 
-    <!-- Aviso de expiração -->
     <div style="
       background-color: #FEF9C3;
       border-left: 4px solid #EAB308;
@@ -254,7 +250,6 @@ export async function sendSchoolCreatedConfirmation({
       </p>
     </div>
 
-    <!-- Aviso de segurança -->
     <p style="color: #9CA3AF; font-size: 12px; margin-top: 24px; line-height: 1.6;">
       Se você não solicitou este acesso ou não reconhece este cadastro,
       por favor ignore este e-mail. Nenhuma ação será tomada automaticamente.
@@ -290,7 +285,118 @@ export async function sendSchoolCreatedConfirmation({
 }
 
 // ============================================================================
-// FUNÇÃO 2: sendLgpdAcceptanceLink
+// FUNÇÃO 2: sendStudentAcceptanceEmail (NOVA)
+// Enviada ao responsável quando admin cadastra um aluno
+// ============================================================================
+
+/**
+ * Envia e-mail de aceite para o responsável do aluno recém-cadastrado.
+ * O responsável deve acessar o link para aceitar LGPD e completar o cadastro.
+ *
+ * @param to - E-mail do responsável
+ * @param studentName - Nome completo do aluno
+ * @param guardianName - Nome do responsável
+ * @param acceptanceLink - Link com token de aceite (expira em 7 dias)
+ */
+export async function sendStudentAcceptanceEmail({
+  to,
+  studentName,
+  guardianName,
+  acceptanceLink,
+}: {
+  to: string;
+  studentName: string;
+  guardianName: string;
+  acceptanceLink: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const resend = getResendClient();
+
+  if (!resend) {
+    return { success: false, error: "Serviço de e-mail não configurado." };
+  }
+
+  const content = `
+    <h2 style="color: #111827; margin-top: 0; font-size: 20px;">
+      Cadastro de ${studentName} na PAI 📚
+    </h2>
+
+    <p style="color: #374151; line-height: 1.7; margin: 0 0 12px;">
+      Olá, <strong>${guardianName}</strong>!
+    </p>
+
+    <p style="color: #374151; line-height: 1.7; margin: 0 0 12px;">
+      <strong>${studentName}</strong> foi cadastrado(a) na 
+      <strong>Plataforma de Apoio Inclusivo (PAI)</strong>.
+    </p>
+
+    <p style="color: #374151; line-height: 1.7; margin: 0 0 4px;">
+      Para liberar o acesso, você precisa completar o cadastro:
+    </p>
+
+    <ul style="color: #374151; line-height: 1.7; margin: 12px 0;">
+      <li>✅ Aceitar os termos de privacidade (LGPD)</li>
+      <li>📝 Completar informações adicionais sobre ${studentName}</li>
+      <li>🔑 Criar senha de acesso</li>
+    </ul>
+
+    ${buildCtaButton(acceptanceLink, "Completar Cadastro →", "#2563EB")}
+
+    <p style="color: #6B7280; font-size: 13px; margin: 0 0 4px;">
+      Se o botão não funcionar, copie e cole o link abaixo:
+    </p>
+    <p style="word-break: break-all; margin: 0 0 20px;">
+      <a href="${acceptanceLink}" style="color: #2563EB; font-size: 13px;">
+        ${acceptanceLink}
+      </a>
+    </p>
+
+    <div style="
+      background-color: #FEF9C3;
+      border-left: 4px solid #EAB308;
+      border-radius: 6px;
+      padding: 12px 16px;
+    ">
+      <p style="margin: 0; color: #713F12; font-size: 13px; line-height: 1.6;">
+        ⚠️ Este link expira em <strong>7 dias</strong>.
+      </p>
+    </div>
+
+    <p style="color: #374151; line-height: 1.7; margin-top: 20px;">
+      Atenciosamente,<br />
+      <strong>Equipe PAI</strong>
+    </p>
+  `;
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: [to],
+      subject: `PAI — Complete o cadastro de ${studentName}`,
+      html: buildEmailLayout(content),
+    });
+
+    console.log(
+      `[email-helper] E-mail de aceite enviado para ${to} (aluno: ${studentName})`
+    );
+
+    return { success: true };
+  } catch (error) {
+    console.error(
+      "[email-helper] Falha ao enviar e-mail de aceite do aluno:",
+      error
+    );
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Erro desconhecido ao enviar e-mail.",
+    };
+  }
+}
+
+// ============================================================================
+// FUNÇÃO 3: sendLgpdAcceptanceLink
 // Enviada ao responsável para aceite dos termos LGPD do aluno.
 // ============================================================================
 
@@ -387,7 +493,7 @@ export async function sendLgpdAcceptanceLink({
 }
 
 // ============================================================================
-// FUNÇÃO 3: sendModerationWarning
+// FUNÇÃO 4: sendModerationWarning
 // Enviada ao responsável e ao admin quando um aluno envia conteúdo inapropriado.
 // ============================================================================
 
@@ -420,7 +526,6 @@ export async function sendModerationWarning({
     return { success: false, error: "Serviço de e-mail não configurado." };
   }
 
-  // Assunto e mensagem variam conforme o número de avisos
   const isBlocked = warningNumber >= 2;
 
   const subject = isBlocked
@@ -435,7 +540,6 @@ export async function sendModerationWarning({
        (imagem com nudez, pornografia ou violência).
        Este é um <strong>aviso</strong>. Na próxima ocorrência, o acesso será bloqueado.`;
 
-  // ── E-mail para o Responsável ─────────────────────────────────────────────
   const guardianContent = `
     <h2 style="color: ${isBlocked ? "#DC2626" : "#D97706"}; margin-top: 0; font-size: 20px;">
       ${isBlocked ? "🚫 Aluno Bloqueado" : "⚠️ Aviso de Segurança"}
@@ -464,7 +568,6 @@ export async function sendModerationWarning({
     </p>
   `;
 
-  // ── E-mail para o Admin ───────────────────────────────────────────────────
   const adminContent = `
     <h2 style="color: ${isBlocked ? "#DC2626" : "#D97706"}; margin-top: 0; font-size: 20px;">
       [ADMIN] ${isBlocked ? "🚫 Aluno Bloqueado" : "⚠️ Alerta de Moderação"} — Aviso #${warningNumber}
@@ -506,7 +609,6 @@ export async function sendModerationWarning({
   `;
 
   try {
-    // Envia para o responsável e para o admin em paralelo
     await Promise.all([
       resend.emails.send({
         from: FROM_EMAIL,
@@ -544,7 +646,7 @@ export async function sendModerationWarning({
 }
 
 // ============================================================================
-// FUNÇÃO 4: sendPasswordResetLink
+// FUNÇÃO 5: sendPasswordResetLink
 // Enviada quando um usuário solicita redefinição de senha.
 // ============================================================================
 
@@ -586,7 +688,6 @@ export async function sendPasswordResetLink({
 
     ${buildCtaButton(resetLink, "🔑 Redefinir minha senha", "#2563EB")}
 
-    <!-- Link alternativo -->
     <p style="color: #6B7280; font-size: 13px; margin: 0 0 4px;">
       Se o botão não funcionar, copie e cole o link abaixo no seu navegador:
     </p>
