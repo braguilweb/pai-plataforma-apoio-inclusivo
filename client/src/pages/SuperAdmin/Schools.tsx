@@ -6,7 +6,15 @@ import { useLocation } from "wouter";
 import { useState } from "react";
 import { toast as sonnerToast } from "sonner";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Mail, RefreshCw } from "lucide-react";
+import { Copy, Mail, RefreshCw, Archive, Trash2, RotateCcw } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 /**
  * Componente interno para gerenciar a ativação de uma escola específica.
@@ -78,41 +86,222 @@ function SchoolActivationCard({ schoolId }: { schoolId: number }) {
   );
 }
 
+/**
+ * Modal de confirmação para remover escola.
+ * Oferece duas opções: Arquivar (soft delete) ou Remover Permanentemente (hard delete).
+ */
+function DeleteSchoolModal({
+  isOpen,
+  onClose,
+  school,
+  onArchive,
+  onDeletePermanent,
+  isArchiving,
+  isDeleting,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  school: { id: number; name: string } | null;
+  onArchive: () => void;
+  onDeletePermanent: () => void;
+  isArchiving: boolean;
+  isDeleting: boolean;
+}) {
+  if (!school) return null;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-amber-700">
+            <Archive className="w-5 h-5" />
+            Remover Escola
+          </DialogTitle>
+          <DialogDescription className="text-gray-600">
+            Como deseja remover a escola <strong>"{school.name}"</strong>?
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="grid gap-4 py-4">
+          {/* Opção 1: Arquivar */}
+          <div className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Archive className="w-5 h-5 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <h4 className="font-semibold text-gray-900">📁 Arquivar Escola</h4>
+                <p className="text-sm text-gray-600 mt-1">
+                  A escola desaparece do dashboard principal, mas fica salva na área de arquivadas. 
+                  Você pode restaurá-la posteriormente.
+                </p>
+                <Button 
+                  variant="outline" 
+                  className="mt-3 w-full border-blue-200 hover:bg-blue-50"
+                  onClick={onArchive}
+                  disabled={isArchiving || isDeleting}
+                >
+                  {isArchiving ? "Arquivando..." : "Arquivar Escola"}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Opção 2: Remover Permanentemente */}
+          <div className="border border-red-200 rounded-lg p-4 hover:bg-red-50 transition-colors">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-red-100 rounded-lg">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div className="flex-1">
+                <h4 className="font-semibold text-red-900">🗑️ Remover Permanentemente</h4>
+                <p className="text-sm text-gray-600 mt-1">
+                  <strong>Atenção:</strong> Esta ação é irreversível! 
+                  Todos os dados da escola serão removidos permanentemente do sistema.
+                </p>
+                <Button 
+                  variant="destructive" 
+                  className="mt-3 w-full"
+                  onClick={onDeletePermanent}
+                  disabled={isArchiving || isDeleting}
+                >
+                  {isDeleting ? "Removendo..." : "Remover Permanentemente"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={isArchiving || isDeleting}>
+            Cancelar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Card de escola arquivada com opção de restaurar.
+ */
+function ArchivedSchoolCard({ 
+  school, 
+  onRestore 
+}: { 
+  school: any; 
+  onRestore: (id: number) => void;
+}) {
+  return (
+    <Card className="grayscale hover:grayscale-0 transition-all duration-300 border-gray-300">
+      <CardHeader className="pb-2">
+        <div className="flex justify-between items-start">
+          <CardTitle className="text-lg text-gray-700">{school.name}</CardTitle>
+          <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-300">
+            Arquivada
+          </Badge>
+        </div>
+        <CardDescription className="text-xs">
+          Arquivada em: {school.dataArquivamento ? new Date(school.dataArquivamento).toLocaleDateString('pt-BR') : 'Data desconhecida'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex gap-2 pt-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="flex-1 gap-2 border-green-200 text-green-700 hover:bg-green-50"
+            onClick={() => onRestore(school.id)}
+          >
+            <RotateCcw className="w-4 h-4" /> Restaurar
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SuperAdminSchools() {
   const [, setLocation] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [schoolToDelete, setSchoolToDelete] = useState<{ id: number; name: string } | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const utils = trpc.useUtils();
 
   // Buscamos as listas do servidor
   const { data: activeSchools, isLoading: loadingActive } = trpc.superAdmin.listSchools.useQuery();
   const { data: pendingSchools, isLoading: loadingPending } = trpc.superAdmin.listPendingSchools.useQuery();
-  
-  const { data: archivedSchools } = trpc.superAdmin.listArchivedSchools.useQuery(undefined, {
+  const { data: archivedSchools, isLoading: loadingArchived } = trpc.superAdmin.listArchivedSchools.useQuery(undefined, {
     enabled: showArchived,
   });
 
-  const { mutate: deleteSchool, isPending: isDeleting } = trpc.superAdmin.deleteSchool.useMutation({
+  // Mutações
+  const archiveSchool = trpc.superAdmin.archiveSchool.useMutation({
     onSuccess: () => {
       utils.superAdmin.listSchools.invalidate();
       utils.superAdmin.listPendingSchools.invalidate();
-      sonnerToast.success("Escola arquivada com sucesso.");
+      utils.superAdmin.listArchivedSchools.invalidate();
+      sonnerToast.success("Escola arquivada com sucesso!");
+      setIsDeleteModalOpen(false);
+      setSchoolToDelete(null);
     },
-    onError: (e) => sonnerToast.error("Erro ao excluir escola", { description: e.message }),
+    onError: (e) => sonnerToast.error("Erro ao arquivar escola", { description: e.message }),
+  });
+
+  const deleteSchoolPermanent = trpc.superAdmin.deleteSchoolPermanent.useMutation({
+    onSuccess: () => {
+      utils.superAdmin.listSchools.invalidate();
+      utils.superAdmin.listPendingSchools.invalidate();
+      utils.superAdmin.listArchivedSchools.invalidate();
+      sonnerToast.success("Escola removida permanentemente!");
+      setIsDeleteModalOpen(false);
+      setSchoolToDelete(null);
+    },
+    onError: (e) => sonnerToast.error("Erro ao remover escola", { description: e.message }),
+  });
+
+  const restoreSchool = trpc.superAdmin.restoreSchool.useMutation({
+    onSuccess: () => {
+      utils.superAdmin.listSchools.invalidate();
+      utils.superAdmin.listArchivedSchools.invalidate();
+      sonnerToast.success("Escola restaurada com sucesso!");
+    },
+    onError: (e) => sonnerToast.error("Erro ao restaurar escola", { description: e.message }),
   });
 
   const filterFn = (school: any) => school.name.toLowerCase().includes(searchTerm.toLowerCase());
   
   const filteredActive = activeSchools?.filter(filterFn) || [];
   const filteredPending = pendingSchools?.filter(filterFn) || [];
+  const filteredArchived = archivedSchools?.filter(filterFn) || [];
 
-  const handleDeleteSchool = (school: { id: number; name: string }) => {
-    const confirmation = window.prompt(`Para confirmar a exclusão da escola "${school.name}", digite EXCLUIR`);
-    if (confirmation !== "EXCLUIR") return;
-    deleteSchool({ schoolId: school.id });
+  const handleDeleteClick = (school: { id: number; name: string }) => {
+    setSchoolToDelete(school);
+    setIsDeleteModalOpen(true);
   };
 
-  if (loadingActive || loadingPending) return <div className="p-8 flex items-center gap-2"><RefreshCw className="animate-spin" /> Carregando escolas...</div>;
+  const handleArchive = () => {
+    if (!schoolToDelete) return;
+    archiveSchool.mutate({ schoolId: schoolToDelete.id });
+  };
+
+  const handleDeletePermanent = () => {
+    if (!schoolToDelete) return;
+    deleteSchoolPermanent.mutate({ schoolId: schoolToDelete.id });
+  };
+
+  const handleRestore = (schoolId: number) => {
+    restoreSchool.mutate({ schoolId });
+  };
+
+  if (loadingActive || loadingPending) {
+    return (
+      <div className="p-8 flex items-center gap-2">
+        <RefreshCw className="animate-spin" /> Carregando escolas...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -121,8 +310,12 @@ export default function SuperAdminSchools() {
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <h1 className="text-3xl font-bold tracking-tight">Gestão de Escolas</h1>
           <div className="flex gap-2">
-             <Button onClick={() => setLocation("/super-admin/dashboard")} variant="secondary" size="sm">Painel Geral</Button>
-             <Button onClick={() => setLocation("/super-admin/escolas/nova")} className="bg-green-500 hover:bg-green-600" size="sm">+ Nova Escola</Button>
+             <Button onClick={() => setLocation("/super-admin/dashboard")} variant="secondary" size="sm">
+               Painel Geral
+             </Button>
+             <Button onClick={() => setLocation("/super-admin/escolas/nova")} className="bg-green-500 hover:bg-green-600" size="sm">
+               + Nova Escola
+             </Button>
           </div>
         </div>
       </div>
@@ -136,7 +329,12 @@ export default function SuperAdminSchools() {
             onChange={(e) => setSearchTerm(e.target.value)}
             className="flex-1"
           />
-          <Button variant={showArchived ? "default" : "outline"} onClick={() => setShowArchived(!showArchived)}>
+          <Button 
+            variant={showArchived ? "default" : "outline"} 
+            onClick={() => setShowArchived(!showArchived)}
+            className="gap-2"
+          >
+            <Archive className="w-4 h-4" />
             {showArchived ? "Ocultar Arquivadas" : "Ver Arquivadas"}
           </Button>
         </div>
@@ -161,7 +359,14 @@ export default function SuperAdminSchools() {
                   <CardContent>
                     <SchoolActivationCard schoolId={school.id} />
                     <div className="mt-4 flex gap-2 justify-end">
-                       <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => handleDeleteSchool(school)}>Remover</Button>
+                       <Button 
+                         size="sm" 
+                         variant="ghost" 
+                         className="text-red-600 hover:bg-red-50" 
+                         onClick={() => handleDeleteClick(school)}
+                       >
+                         <Trash2 className="w-4 h-4 mr-1" /> Remover
+                       </Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -198,16 +403,31 @@ export default function SuperAdminSchools() {
                       </div>
                     </div>
                     <div className="flex gap-2 pt-2">
-                      <Button variant="outline" size="sm" className="flex-1" onClick={() => setLocation(`/super-admin/escolas/${school.id}`)}>Gerenciar</Button>
-                      <Button variant="destructive" size="sm" onClick={() => handleDeleteSchool(school)}>Excluir</Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1" 
+                        onClick={() => setLocation(`/super-admin/escolas/${school.id}`)}
+                      >
+                        Gerenciar
+                      </Button>
+                      <Button 
+                        variant="destructive" 
+                        size="sm"
+                        onClick={() => handleDeleteClick(school)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
               ))
             ) : (
-              !loadingActive && <div className="col-span-full py-12 text-center bg-white rounded-2xl border-2 border-dashed border-gray-200">
-                <p className="text-gray-400">Nenhuma escola ativa encontrada.</p>
-              </div>
+              !loadingActive && (
+                <div className="col-span-full py-12 text-center bg-white rounded-2xl border-2 border-dashed border-gray-200">
+                  <p className="text-gray-400">Nenhuma escola ativa encontrada.</p>
+                </div>
+              )
             )}
           </div>
         </section>
@@ -215,16 +435,23 @@ export default function SuperAdminSchools() {
         {/* --- SEÇÃO: ARQUIVADAS --- */}
         {showArchived && (
           <section className="mt-12 pt-8 border-t border-gray-200 space-y-4">
-            <h2 className="text-xl font-bold text-gray-500 italic">Escolas Arquivadas</h2>
-            {archivedSchools && archivedSchools.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 opacity-75">
-                {archivedSchools.map((school: any) => (
-                  <Card key={school.id} className="grayscale">
-                    <CardHeader>
-                      <CardTitle>{school.name}</CardTitle>
-                      <CardDescription>Arquivada em: {new Date(school.deletedAt).toLocaleDateString()}</CardDescription>
-                    </CardHeader>
-                  </Card>
+            <div className="flex items-center gap-2">
+              <Archive className="w-5 h-5 text-gray-500" />
+              <h2 className="text-xl font-bold text-gray-600">Escolas Arquivadas ({filteredArchived.length})</h2>
+            </div>
+            
+            {loadingArchived ? (
+              <div className="py-8 text-center">
+                <RefreshCw className="animate-spin mx-auto mb-2" /> Carregando arquivadas...
+              </div>
+            ) : filteredArchived.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {filteredArchived.map((school: any) => (
+                  <ArchivedSchoolCard 
+                    key={school.id} 
+                    school={school} 
+                    onRestore={handleRestore}
+                  />
                 ))}
               </div>
             ) : (
@@ -233,6 +460,20 @@ export default function SuperAdminSchools() {
           </section>
         )}
       </div>
+
+      {/* Modal de Confirmação */}
+      <DeleteSchoolModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setSchoolToDelete(null);
+        }}
+        school={schoolToDelete}
+        onArchive={handleArchive}
+        onDeletePermanent={handleDeletePermanent}
+        isArchiving={archiveSchool.isPending}
+        isDeleting={deleteSchoolPermanent.isPending}
+      />
     </div>
   );
 }

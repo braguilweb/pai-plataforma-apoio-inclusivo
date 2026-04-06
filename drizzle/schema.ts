@@ -177,7 +177,20 @@ export const schools = pgTable("schools", {
    */
   isActive: boolean("isActive").default(true).notNull(),
 
-  /** Data/hora de exclusão lógica da escola (soft delete) */
+  /**
+   * Indica se a escola foi arquivada (soft delete).
+   * Escolas arquivadas não aparecem no dashboard principal,
+   * mas ficam disponíveis na área de arquivadas.
+   */
+  arquivada: boolean("arquivada").default(false).notNull(),
+
+  /** Data/hora em que a escola foi arquivada */
+  dataArquivamento: timestamp("dataArquivamento"),
+
+  /**
+   * Data/hora de exclusão permanente da escola (hard delete lógico).
+   * Quando preenchido, indica que a escola foi removida permanentemente.
+   */
   deletedAt: timestamp("deletedAt"),
 
   /** Data/hora de criação do registro */

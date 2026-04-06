@@ -2,7 +2,7 @@ import { superAdminProcedure, router } from "../_core/trpc";
 import type { TrpcContext } from "../_core/context";
 import { schools, users, students } from "../../drizzle/schema";
 import { z } from "zod";
-import { eq, and, or } from "drizzle-orm";
+import { eq, and, or, isNull, desc } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { sendSchoolCreatedConfirmation } from "../email-helper";
 
@@ -43,7 +43,18 @@ export const superAdminRouter = router({
     const db = await ctx.getDb();
     if (!db) throw new Error("Banco de dados indisponível");
 
-    const allSchools = await db.select().from(schools).execute();
+    // Contar apenas escolas ativas (não arquivadas e não deletadas)
+    const allSchools = await db
+      .select()
+      .from(schools)
+      .where(
+        and(
+          eq(schools.arquivada, false),
+          isNull(schools.deletedAt)
+        )
+      )
+      .execute();
+    
     const allStudents = await db.select().from(students).execute();
     const allTeachers = await db.select().from(users).where(eq(users.role, "teacher")).execute();
 
@@ -56,36 +67,69 @@ export const superAdminRouter = router({
   }),
 
   /** 
-   * ATUALIZADO: Retorna escolas ATIVAS e também as PENDENTES de ativação.
-   * Isso corrige o problema da escola "sumir" após ser criada.
+   * Lista escolas ATIVAS (não arquivadas, não deletadas, isActive = true).
+   * Usada no dashboard principal.
    */
   listSchools: superAdminProcedure.query(async (opts: ProcedureOpts) => {
     const { ctx } = opts;
     const db = await ctx.getDb();
     if (!db) throw new Error("Banco de dados indisponível");
 
-    // Buscamos escolas onde isActive é true OU que tenham um admin vinculado
-    // Note: Em uma query real, poderíamos fazer join com users para ver o status do admin.
-    return await db.select().from(schools).where(eq(schools.isActive, true)).execute();
+    return await db
+      .select()
+      .from(schools)
+      .where(
+        and(
+          eq(schools.isActive, true),
+          eq(schools.arquivada, false),
+          isNull(schools.deletedAt)
+        )
+      )
+      .execute();
   }),
 
   /**
-   * NOVO: Lista especificamente escolas que aguardam ativação do admin.
+   * Lista escolas que aguardam ativação do admin.
+   * (isActive = false, não arquivadas, não deletadas)
    */
   listPendingSchools: superAdminProcedure.query(async (opts: ProcedureOpts) => {
     const { ctx } = opts;
     const db = await ctx.getDb();
     if (!db) throw new Error("Banco de dados indisponível");
 
-    return await db.select().from(schools).where(eq(schools.isActive, false)).execute();
+    return await db
+      .select()
+      .from(schools)
+      .where(
+        and(
+          eq(schools.isActive, false),
+          eq(schools.arquivada, false),
+          isNull(schools.deletedAt)
+        )
+      )
+      .execute();
   }),
 
+  /**
+   * Lista escolas ARQUIVADAS (soft delete).
+   * Escolas que foram arquivadas mas não removidas permanentemente.
+   */
   listArchivedSchools: superAdminProcedure.query(async (opts: ProcedureOpts) => {
     const { ctx } = opts;
     const db = await ctx.getDb();
     if (!db) throw new Error("Banco de dados indisponível");
-    // Aqui usamos uma lógica de soft-delete se implementada (ex: isActive false e não pendente)
-    return []; 
+
+    return await db
+      .select()
+      .from(schools)
+      .where(
+        and(
+          eq(schools.arquivada, true),
+          isNull(schools.deletedAt)
+        )
+      )
+      .orderBy(desc(schools.dataArquivamento))
+      .execute();
   }),
 
   // --- CRIAÇÃO E GESTÃO ---
@@ -127,7 +171,8 @@ export const superAdminRouter = router({
           adminId,
           colorPalette: input.colorPalette,
           customColorHex: input.customColorHex,
-          isActive: false, 
+          isActive: false,
+          arquivada: false,
         }).returning({ id: schools.id }).execute();
 
         const schoolId = schoolInsert[0].id;
@@ -146,17 +191,21 @@ export const superAdminRouter = router({
         return {
           success: true,
           schoolId,
-          activationLink, // Retornamos o link para o frontend exibir se o e-mail falhar
+          activationLink,
           confirmationEmailSent: emailResult.success,
           confirmationEmailError: emailResult.error
         };
-      } catch (e) {
-        throw new Error("Erro ao criar escola");
+      } catch (e: any) {
+        // Verificar se é erro de constraint única (email duplicado)
+        if (e.message?.includes("unique") || e.code === "23505") {
+          throw new Error("Já existe uma escola ativa com este administrador. Arquive ou remova a escola existente primeiro.");
+        }
+        throw new Error("Erro ao criar escola: " + (e.message || "Erro desconhecido"));
       }
     }),
 
   /**
-   * NOVO: Endpoint para reenviar convite ou obter link manual.
+   * Endpoint para reenviar convite ou obter link manual.
    */
   getSchoolActivationDetails: superAdminProcedure
     .input(z.object({ schoolId: z.number() }))
@@ -165,10 +214,25 @@ export const superAdminRouter = router({
       const db = await ctx.getDb();
       if (!db) throw new Error("Banco de dados indisponível");
 
-      const schoolResult = await db.select().from(schools).where(eq(schools.id, input.schoolId)).limit(1);
+      const schoolResult = await db
+        .select()
+        .from(schools)
+        .where(
+          and(
+            eq(schools.id, input.schoolId),
+            isNull(schools.deletedAt)
+          )
+        )
+        .limit(1);
+      
       if (!schoolResult.length) throw new Error("Escola não encontrada");
 
-      const admin = await db.select().from(users).where(eq(users.id, schoolResult[0].adminId)).limit(1);
+      const admin = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, schoolResult[0].adminId))
+        .limit(1);
+      
       if (!admin.length) throw new Error("Admin não encontrado");
 
       return {
@@ -180,7 +244,7 @@ export const superAdminRouter = router({
     }),
 
   /**
-   * NOVO: Reenvia o e-mail de ativação para uma escola específica.
+   * Reenvia o e-mail de ativação para uma escola específica.
    */
   resendActivationEmail: superAdminProcedure
     .input(z.object({ schoolId: z.number() }))
@@ -189,8 +253,26 @@ export const superAdminRouter = router({
       const db = await ctx.getDb();
       if (!db) throw new Error("Banco de dados indisponível");
 
-      const school = await db.select().from(schools).where(eq(schools.id, input.schoolId)).limit(1);
-      const admin = await db.select().from(users).where(eq(users.id, school[0].adminId)).limit(1);
+      const school = await db
+        .select()
+        .from(schools)
+        .where(
+          and(
+            eq(schools.id, input.schoolId),
+            isNull(schools.deletedAt)
+          )
+        )
+        .limit(1);
+      
+      if (!school.length) throw new Error("Escola não encontrada");
+
+      const admin = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, school[0].adminId))
+        .limit(1);
+
+      if (!admin.length) throw new Error("Admin não encontrado");
 
       if (!admin[0].activationToken) {
          // Se não tem token, gera um novo
@@ -213,17 +295,180 @@ export const superAdminRouter = router({
       return { success: result.success, error: result.error };
     }),
 
-  getSchool: superAdminProcedure.input(z.object({ schoolId: z.number() })).query(async (opts) => {
-    const { ctx, input } = opts;
-    const db = await ctx.getDb();
-    if (!db) throw new Error("Banco de dados indisponível"); 
-    return await db.select().from(schools).where(eq(schools.id, input.schoolId)).execute();
-  }),
+  getSchool: superAdminProcedure
+    .input(z.object({ schoolId: z.number() }))
+    .query(async (opts) => {
+      const { ctx, input } = opts;
+      const db = await ctx.getDb();
+      if (!db) throw new Error("Banco de dados indisponível");
 
-  deleteSchool: superAdminProcedure.input(z.object({ schoolId: z.number() })).mutation(async (opts) => {
-    const { ctx, input } = opts;
-    const db = await ctx.getDb();
-    if (!db) throw new Error("Banco de dados indisponível");
-    return await db.update(schools).set({ isActive: false, deletedAt: new Date() }).where(eq(schools.id, input.schoolId)).execute();
-  }),
+      return await db
+        .select()
+        .from(schools)
+        .where(
+          and(
+            eq(schools.id, input.schoolId),
+            isNull(schools.deletedAt)
+          )
+        )
+        .execute();
+    }),
+
+  /**
+   * ARQUIVAR escola (Soft Delete).
+   * A escola some do dashboard mas fica na área de arquivadas.
+   */
+  archiveSchool: superAdminProcedure
+    .input(z.object({ schoolId: z.number() }))
+    .mutation(async (opts) => {
+      const { ctx, input } = opts;
+      const db = await ctx.getDb();
+      if (!db) throw new Error("Banco de dados indisponível");
+
+      const result = await db
+        .update(schools)
+        .set({ 
+          arquivada: true, 
+          dataArquivamento: new Date(),
+          isActive: false,
+          updatedAt: new Date()
+        })
+        .where(
+          and(
+            eq(schools.id, input.schoolId),
+            isNull(schools.deletedAt)
+          )
+        )
+        .returning({ id: schools.id })
+        .execute();
+
+      if (!result.length) {
+        throw new Error("Escola não encontrada ou já arquivada/removida");
+      }
+
+      return { 
+        success: true, 
+        message: "Escola arquivada com sucesso",
+        schoolId: input.schoolId 
+      };
+    }),
+
+  /**
+   * RESTAURAR escola arquivada.
+   * Volta a escola para o dashboard (desfaz o soft delete).
+   */
+  restoreSchool: superAdminProcedure
+    .input(z.object({ schoolId: z.number() }))
+    .mutation(async (opts) => {
+      const { ctx, input } = opts;
+      const db = await ctx.getDb();
+      if (!db) throw new Error("Banco de dados indisponível");
+
+      const result = await db
+        .update(schools)
+        .set({ 
+          arquivada: false, 
+          dataArquivamento: null,
+          updatedAt: new Date()
+        })
+        .where(
+          and(
+            eq(schools.id, input.schoolId),
+            eq(schools.arquivada, true),
+            isNull(schools.deletedAt)
+          )
+        )
+        .returning({ id: schools.id })
+        .execute();
+
+      if (!result.length) {
+        throw new Error("Escola não encontrada ou não está arquivada");
+      }
+
+      return { 
+        success: true, 
+        message: "Escola restaurada com sucesso",
+        schoolId: input.schoolId 
+      };
+    }),
+
+  /**
+   * REMOVER PERMANENTEMENTE (Hard Delete).
+   * Remove a escola e todos os dados associados permanentemente.
+   * ATENÇÃO: Esta ação é irreversível!
+   */
+  deleteSchoolPermanent: superAdminProcedure
+    .input(z.object({ schoolId: z.number() }))
+    .mutation(async (opts) => {
+      const { ctx, input } = opts;
+      const db = await ctx.getDb();
+      if (!db) throw new Error("Banco de dados indisponível");
+
+      // Primeiro, verificar se a escola existe
+      const school = await db
+        .select()
+        .from(schools)
+        .where(eq(schools.id, input.schoolId))
+        .limit(1);
+
+      if (!school.length) {
+        throw new Error("Escola não encontrada");
+      }
+
+      // Hard delete: marcar como deletada (ou remover do banco)
+      // Opção 1: Soft delete lógico (recomendado - mantém dados para auditoria)
+      const result = await db
+        .update(schools)
+        .set({ 
+          deletedAt: new Date(),
+          isActive: false,
+          arquivada: true,
+          updatedAt: new Date()
+        })
+        .where(eq(schools.id, input.schoolId))
+        .returning({ id: schools.id })
+        .execute();
+
+      // Opção 2: Hard delete físico (descomente se quiser remover do banco)
+      // await db.delete(schools).where(eq(schools.id, input.schoolId)).execute();
+
+      if (!result.length) {
+        throw new Error("Erro ao remover escola");
+      }
+
+      return { 
+        success: true, 
+        message: "Escola removida permanentemente",
+        schoolId: input.schoolId 
+      };
+    }),
+
+  /**
+   * DEPRECATED: Mantido para compatibilidade.
+   * Agora redireciona para archiveSchool (soft delete).
+   */
+  deleteSchool: superAdminProcedure
+    .input(z.object({ schoolId: z.number() }))
+    .mutation(async (opts) => {
+      const { ctx, input } = opts;
+      const db = await ctx.getDb();
+      if (!db) throw new Error("Banco de dados indisponível");
+      
+      // Soft delete (arquivar) ao invés de hard delete
+      return await db
+        .update(schools)
+        .set({ 
+          arquivada: true, 
+          dataArquivamento: new Date(),
+          isActive: false,
+          updatedAt: new Date()
+        })
+        .where(
+          and(
+            eq(schools.id, input.schoolId),
+            isNull(schools.deletedAt)
+          )
+        )
+        .execute();
+    }),
 });
