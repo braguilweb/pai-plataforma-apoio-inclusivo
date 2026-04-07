@@ -5,7 +5,7 @@ import { Resend } from "resend";
 // ============================================================================
 
 /** E-mail remetente padrão de todas as comunicações da plataforma */
-const FROM_EMAIL = "onboarding@resend.dev";
+const FROM_EMAIL = process.env.FROM_EMAIL || "onboarding@resend.dev";
 
 /**
  * Retorna uma instância do cliente Resend se a chave de API estiver configurada.
@@ -303,11 +303,13 @@ export async function sendStudentAcceptanceEmail({
   studentName,
   guardianName,
   acceptanceLink,
+  loginUsername,          // ✅ novo parâmetro
 }: {
   to: string;
   studentName: string;
   guardianName: string;
   acceptanceLink: string;
+  loginUsername: string;  // ✅ novo parâmetro
 }): Promise<{ success: boolean; error?: string }> {
   const resend = getResendClient();
 
@@ -328,6 +330,49 @@ export async function sendStudentAcceptanceEmail({
       <strong>${studentName}</strong> foi cadastrado(a) na 
       <strong>Plataforma de Apoio Inclusivo (PAI)</strong>.
     </p>
+
+    <!-- ✅ Bloco de credenciais de acesso -->
+    <div style="
+      background-color: #EEF2FF;
+      border: 1px solid #C7D2FE;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 20px 0;
+    ">
+      <p style="margin: 0 0 8px; color: #3730A3; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">
+        🔑 Credenciais de Acesso do Aluno
+      </p>
+      <table cellpadding="0" cellspacing="0" width="100%">
+        <tr>
+          <td style="padding: 4px 0; color: #374151; font-size: 14px; width: 90px;">
+            <strong>Login:</strong>
+          </td>
+          <td style="padding: 4px 0;">
+            <span style="
+              background-color: #FFFFFF;
+              border: 1px solid #C7D2FE;
+              border-radius: 4px;
+              padding: 2px 10px;
+              font-family: monospace;
+              font-size: 15px;
+              color: #4F46E5;
+              font-weight: bold;
+              letter-spacing: 0.5px;
+            ">
+              ${loginUsername}
+            </span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 0; color: #374151; font-size: 14px;">
+            <strong>Senha:</strong>
+          </td>
+          <td style="padding: 4px 0; color: #6B7280; font-size: 13px;">
+            Será criada ao completar o cadastro abaixo
+          </td>
+        </tr>
+      </table>
+    </div>
 
     <p style="color: #374151; line-height: 1.7; margin: 0 0 4px;">
       Para liberar o acesso, você precisa completar o cadastro:
@@ -357,7 +402,8 @@ export async function sendStudentAcceptanceEmail({
       padding: 12px 16px;
     ">
       <p style="margin: 0; color: #713F12; font-size: 13px; line-height: 1.6;">
-        ⚠️ Este link expira em <strong>7 dias</strong>.
+        ⚠️ Este link expira em <strong>7 dias</strong>. 
+        Guarde o login <strong>${loginUsername}</strong> em local seguro.
       </p>
     </div>
 
@@ -371,29 +417,24 @@ export async function sendStudentAcceptanceEmail({
     await resend.emails.send({
       from: FROM_EMAIL,
       to: [to],
-      subject: `PAI — Complete o cadastro de ${studentName}`,
+      subject: `PAI — Complete o cadastro de ${studentName} (login: ${loginUsername})`,
       html: buildEmailLayout(content),
     });
 
     console.log(
-      `[email-helper] E-mail de aceite enviado para ${to} (aluno: ${studentName})`
+      `[email-helper] E-mail de aceite enviado para ${to} (aluno: ${studentName}, login: ${loginUsername})`
     );
 
     return { success: true };
   } catch (error) {
-    console.error(
-      "[email-helper] Falha ao enviar e-mail de aceite do aluno:",
-      error
-    );
+    console.error("[email-helper] Falha ao enviar e-mail de aceite do aluno:", error);
     return {
       success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Erro desconhecido ao enviar e-mail.",
+      error: error instanceof Error ? error.message : "Erro desconhecido ao enviar e-mail.",
     };
   }
 }
+
 
 // ============================================================================
 // FUNÇÃO 3: sendLgpdAcceptanceLink

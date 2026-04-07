@@ -5,51 +5,67 @@ import {
   router,
 } from "../_core/trpc";
 import type { TrpcContext } from "../_core/context";
-import { students, anamnesis, schools, users } from "../../drizzle/schema";
+import { students, anamnesis, schools, users, lgpdAcceptanceLogs } from "../../drizzle/schema";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { jwtVerify, SignJWT } from "jose";
-import { ENV } from "../_core/env";
 import { sendLgpdAcceptanceLink } from "../email-helper";
-import { lgpdAcceptanceLogs } from "../../drizzle/schema";
+import bcrypt from "bcryptjs";
 
 type ProcedureOpts = {
   ctx: TrpcContext;
   input?: any;
 };
 
-const ACCEPTANCE_PURPOSE = "guardian_lgpd_acceptance";
+// ============================================================================
+// HELPER: Busca studentId pelo token salvo no banco (nanoid)
+// Substitui o sistema JWT que era incompatível com o schools.router.ts
+// ============================================================================
+async function getStudentIdFromToken(db: any, token: string): Promise<number> {
+  // Busca o usuário que possui esse activation_token
+  const userRows = await db
+    .select()
+    .from(users)
+    .where(eq(users.activationToken, token))
+    .limit(1)
+    .execute();
 
-function getTokenSecret() {
-  return new TextEncoder().encode(ENV.cookieSecret || "dev-secret");
-}
-
-async function createAcceptanceToken(studentId: number) {
-  return new SignJWT({ purpose: ACCEPTANCE_PURPOSE, studentId })
-    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-    .setExpirationTime("7d")
-    .sign(getTokenSecret());
-}
-
-async function getStudentIdFromAcceptanceToken(token: string): Promise<number> {
-  const { payload } = await jwtVerify(token, getTokenSecret(), {
-    algorithms: ["HS256"],
-  });
-
-  if (payload.purpose !== ACCEPTANCE_PURPOSE || typeof payload.studentId !== "number") {
-    throw new Error("Token de aceite inválido");
+  if (!userRows.length) {
+    throw new Error("Link de aceite inválido ou expirado");
   }
 
-  return payload.studentId;
+  const user = userRows[0];
+
+  // Verifica se o token não expirou
+  if (user.activationTokenExpires && new Date(user.activationTokenExpires) < new Date()) {
+    throw new Error("Este link de aceite expirou. Solicite um novo ao administrador da escola.");
+  }
+
+  // Busca o aluno vinculado ao usuário
+  const studentRows = await db
+    .select()
+    .from(students)
+    .where(eq(students.userId, user.id))
+    .limit(1)
+    .execute();
+
+  if (!studentRows.length) {
+    throw new Error("Aluno não encontrado para este link");
+  }
+
+  return studentRows[0].id;
 }
 
+// ============================================================================
+
 export const studentsRouter = router({
-  // Criar aluno (Bloco 1 + 2)
+
+  // ============================================================================
+  // CRIAR ALUNO
+  // ============================================================================
   createStudent: adminSchoolProcedure
     .input(
       z.object({
-        // Bloco 1 - Identificação
         fullName: z.string().min(3),
         birthDate: z.string(),
         series: z.enum(["1º_ano", "2º_ano", "3º_ano"]),
@@ -58,14 +74,10 @@ export const studentsRouter = router({
         guardianName: z.string(),
         guardianContactWhatsapp: z.string(),
         guardianContactEmail: z.string().email().optional(),
-
-        // Bloco 2 - Diagnóstico
         conditions: z.array(z.string()),
         readingLevel: z.enum(["non_reader", "reads_with_difficulty", "reads_well"]),
         writingLevel: z.enum(["non_writer", "writes_with_difficulty", "writes_well"]),
         observations: z.string().optional(),
-
-        // Bloco 4 - Plano de Estudo
         subjects: z.array(z.string()),
         enemEnabled: z.boolean().default(false),
       })
@@ -89,7 +101,11 @@ export const studentsRouter = router({
 
         const firstName = input.fullName.trim().split(" ")[0] || input.fullName;
 
-        const { studentId } = await db.transaction(async (tx) => {
+        // ── Token como nanoid (compatível com schools.router.ts) ──────────────
+        const acceptanceToken = nanoid(64);
+        const tokenExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
+
+        const { studentId } = await db.transaction(async (tx: any) => {
           const studentUserInsert = await tx
             .insert(users)
             .values({
@@ -102,6 +118,8 @@ export const studentsRouter = router({
               birthDate: input.birthDate,
               status: "pending_approval",
               lgpdAccepted: false,
+              activationToken: acceptanceToken,        // ✅ nanoid no banco
+              activationTokenExpires: tokenExpires,    // ✅ expiração
             })
             .returning({ id: users.id });
 
@@ -145,11 +163,12 @@ export const studentsRouter = router({
           return { studentId: createdStudentId };
         });
 
-        const acceptanceToken = await createAcceptanceToken(studentId);
         const appBaseUrl = process.env.APP_BASE_URL || "http://localhost:3000";
         const acceptanceLink = `${appBaseUrl}/aceite/${acceptanceToken}`;
 
-        const whatsappLink = `https://wa.me/${String(input.guardianContactWhatsapp).replace(/\D/g, "")}?text=${encodeURIComponent(`Olá! Segue o link para aceite LGPD do aluno ${input.fullName}: ${acceptanceLink}`)}`;
+        const whatsappLink = `https://wa.me/${String(input.guardianContactWhatsapp).replace(/\D/g, "")}?text=${encodeURIComponent(
+          `Olá! Segue o link para aceite LGPD do aluno ${input.fullName}: ${acceptanceLink}`
+        )}`;
 
         if (input.guardianContactEmail) {
           await sendLgpdAcceptanceLink({
@@ -162,7 +181,7 @@ export const studentsRouter = router({
 
         return {
           success: true,
-          studentId: studentId,
+          studentId,
           acceptanceLink,
           whatsappLink,
         };
@@ -172,6 +191,58 @@ export const studentsRouter = router({
       }
     }),
 
+  // Adicione dentro do studentsRouter:
+  //  — limpa o token aqui, após criar a senha
+  setStudentPassword: publicProcedure
+  .input(z.object({
+    token: z.string().min(10),
+    password: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
+  }))
+  .mutation(async (opts: ProcedureOpts) => {
+    const { ctx, input } = opts;
+    const db = await ctx.getDb();
+    if (!db) throw new Error("Database not available");
+    if (!input) throw new Error("Input not provided");
+
+    const userRows = await db
+      .select()
+      .from(users)
+      .where(eq(users.activationToken, input.token))
+      .limit(1)
+      .execute();
+
+    if (!userRows.length) {
+      throw new Error("Link inválido ou senha já foi criada anteriormente.");
+    }
+
+    // Verifica expiração
+    if (
+      userRows[0].activationTokenExpires &&
+      new Date(userRows[0].activationTokenExpires) < new Date()
+    ) {
+      throw new Error("Este link expirou. Solicite um novo ao administrador.");
+    }
+
+    const hashedPassword = await bcrypt.hash(input.password, 12);
+
+    await db
+      .update(users)
+      .set({
+        loginPasswordHash: hashedPassword,
+        activationToken: null,        // ✅ limpa o token só aqui
+        activationTokenExpires: null,
+      })
+      .where(eq(users.id, userRows[0].id))
+      .execute();
+
+    return { success: true };
+  }),
+
+
+  // ============================================================================
+  // RESOLVER TOKEN DE ACEITE
+  // ✅ Agora busca pelo nanoid no banco em vez de verificar JWT
+  // ============================================================================
   resolveAcceptanceToken: publicProcedure
     .input(z.object({ token: z.string().min(10) }))
     .query(async (opts: ProcedureOpts) => {
@@ -180,7 +251,8 @@ export const studentsRouter = router({
       if (!db) throw new Error("Database not available");
       if (!input) throw new Error("Input not provided");
 
-      const studentId = await getStudentIdFromAcceptanceToken(input.token);
+      // ✅ Usa nanoid lookup no banco
+      const studentId = await getStudentIdFromToken(db, input.token);
 
       const studentRows = await db
         .select()
@@ -213,11 +285,14 @@ export const studentsRouter = router({
 
       return {
         studentId,
+        studentName: studentUserRows[0].name,
         hasBlock3: Boolean(anamnesisRows[0]?.block3Completed),
       };
     }),
 
-  // Preencher Bloco 3 (Preferências) pelo responsável
+  // ============================================================================
+  // PREENCHER BLOCO 3 (Preferências)
+  // ============================================================================
   fillBlock3: publicProcedure
     .input(
       z.object({
@@ -233,12 +308,12 @@ export const studentsRouter = router({
     )
     .mutation(async (opts: ProcedureOpts) => {
       const { ctx, input } = opts;
-
       const db = await ctx.getDb();
       if (!db) throw new Error("Database not available");
       if (!input) throw new Error("Input not provided");
 
-      const studentId = await getStudentIdFromAcceptanceToken(input.token);
+      // ✅ Usa nanoid lookup no banco
+      const studentId = await getStudentIdFromToken(db, input.token);
 
       const studentRows = await db
         .select()
@@ -275,74 +350,79 @@ export const studentsRouter = router({
         .execute();
     }),
 
-  // Aceitar LGPD (responsável)
-  acceptLGPD: publicProcedure
-    .input(z.object({ token: z.string().min(10), agreementToken: z.boolean() }))
-    .mutation(async (opts: ProcedureOpts) => {
-      const { ctx, input } = opts;
+  // ============================================================================
+  // ACEITAR LGPD
+  // ============================================================================
+  // ✅ acceptLGPD — NÃO limpa o token aqui
+acceptLGPD: publicProcedure
+  .input(z.object({ token: z.string().min(10), agreementToken: z.boolean() }))
+  .mutation(async (opts: ProcedureOpts) => {
+    const { ctx, input } = opts;
+    if (!input) throw new Error("Input not provided");
+    if (!input.agreementToken) throw new Error("Você deve aceitar os termos");
 
-      if (!input) throw new Error("Input not provided");
-      if (!input.agreementToken) throw new Error("Você deve aceitar os termos");
+    const db = await ctx.getDb();
+    if (!db) throw new Error("Database not available");
 
-      const db = await ctx.getDb();
-      if (!db) throw new Error("Database not available");
+    const studentId = await getStudentIdFromToken(db, input.token);
 
-      const studentId = await getStudentIdFromAcceptanceToken(input.token);
+    const studentRows = await db
+      .select()
+      .from(students)
+      .where(eq(students.id, studentId))
+      .limit(1)
+      .execute();
 
-      const studentRows = await db
-        .select()
-        .from(students)
-        .where(eq(students.id, studentId))
-        .limit(1)
-        .execute();
+    if (!studentRows.length) throw new Error("Aluno não encontrado");
 
-      if (!studentRows.length) throw new Error("Aluno não encontrado");
+    const studentUserRows = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, studentRows[0].userId))
+      .limit(1)
+      .execute();
 
-      const studentUserRows = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, studentRows[0].userId))
-        .limit(1)
-        .execute();
+    if (!studentUserRows.length) throw new Error("Usuário do aluno não encontrado");
+    if (studentUserRows[0].lgpdAccepted) throw new Error("Este link de aceite já foi utilizado");
 
-      if (!studentUserRows.length) throw new Error("Usuário do aluno não encontrado");
-      if (studentUserRows[0].lgpdAccepted) throw new Error("Este link de aceite já foi utilizado");
+    await db
+      .update(anamnesis)
+      .set({ block3Completed: true })
+      .where(eq(anamnesis.studentId, studentId))
+      .execute();
 
-      await db
-        .update(anamnesis)
-        .set({
-          block3Completed: true,
-        })
-        .where(eq(anamnesis.studentId, studentId))
-        .execute();
+    await db
+      .update(users)
+      .set({
+        lgpdAccepted: true,
+        lgpdAcceptedAt: new Date(),
+        status: "active",
+        // ✅ token NÃO é limpo aqui — será limpo pelo setStudentPassword
+      })
+      .where(eq(users.id, studentRows[0].userId))
+      .execute();
 
-      await db
-        .update(users)
-        .set({
-          lgpdAccepted: true,
-          lgpdAcceptedAt: new Date(),
-          status: "active",
-        })
-        .where(eq(users.id, studentRows[0].userId))
-        .execute();
+    const ipAddress =
+      (ctx.req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
+      ctx.req.socket.remoteAddress ||
+      null;
+    const userAgent = ctx.req.headers["user-agent"] || null;
 
-      const ipAddress =
-        (ctx.req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
-        ctx.req.socket.remoteAddress ||
-        null;
-      const userAgent = ctx.req.headers["user-agent"] || null;
+    await db.insert(lgpdAcceptanceLogs).values({
+      userId: studentRows[0].userId,
+      schoolId: studentRows[0].schoolId,
+      acceptanceType: "guardian",
+      ipAddress,
+      userAgent,
+    });
 
-      await db.insert(lgpdAcceptanceLogs).values({
-        userId: studentRows[0].userId,
-        schoolId: studentRows[0].schoolId,
-        acceptanceType: "guardian",
-        ipAddress,
-        userAgent,
-      });
+    return { success: true };
+  }),
 
-      return { success: true };
-    }),
-
+  
+  // ============================================================================
+  // PRIMEIRO ACESSO
+  // ============================================================================
   completeFirstAccess: protectedProcedure
     .input(
       z.object({
@@ -379,12 +459,13 @@ export const studentsRouter = router({
       return { success: true };
     }),
 
-  // Obter dados do aluno para chat
+  // ============================================================================
+  // PERFIL DO ALUNO PARA CHAT
+  // ============================================================================
   getStudentProfile: protectedProcedure
     .input(z.object({ studentId: z.number() }))
     .query(async (opts: ProcedureOpts) => {
       const { ctx, input } = opts;
-
       const db = await ctx.getDb();
       if (!db) throw new Error("Database not available");
       if (!input) throw new Error("Input not provided");

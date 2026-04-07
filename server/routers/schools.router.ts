@@ -11,11 +11,86 @@ type ProcedureOpts = {
   input?: any;
 };
 
+// ============================================================================
+// HELPER: Geração de login único
+// Prioridade:
+//   1. nome.primeirosobrenome  → ex: joao.silva
+//   2. nome.anonascimento      → ex: joao.2015
+//   3. nome.001, nome.002...   → ex: joao.001
+// ============================================================================
+
+/**
+ * Normaliza uma string para uso em login:
+ * - Remove acentos
+ * - Converte para minúsculas
+ * - Remove caracteres especiais
+ */
+function normalizeForLogin(str: string): string {
+  return str
+    .normalize("NFD")                          // separa letras de acentos
+    .replace(/[\u0300-\u036f]/g, "")           // remove acentos
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");               // só letras e números
+}
+
+/**
+ * Gera um login único para o aluno verificando disponibilidade no banco.
+ *
+ * @param db        - Instância do banco de dados
+ * @param fullName  - Nome completo do aluno
+ * @param birthDate - Data de nascimento no formato "YYYY-MM-DD"
+ * @returns Login único gerado
+ */
+async function generateUniqueLogin(
+  db: any,
+  fullName: string,
+  birthDate: string
+): Promise<string> {
+  const parts = fullName.trim().split(/\s+/);
+  const firstName = normalizeForLogin(parts[0]);
+  const lastName = parts.length > 1 ? normalizeForLogin(parts[parts.length - 1]) : null;
+  const birthYear = birthDate ? new Date(birthDate).getFullYear().toString() : null;
+
+  // Checa se login já existe no banco
+  const isLoginTaken = async (login: string): Promise<boolean> => {
+    const existing = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.loginUsername, login))
+      .limit(1)
+      .execute();
+    return existing.length > 0;
+  };
+
+  // Tentativa 1: nome.primeirosobrenome → ex: joao.silva
+  if (lastName) {
+    const candidate = `${firstName}.${lastName}`;
+    if (!(await isLoginTaken(candidate))) return candidate;
+  }
+
+  // Tentativa 2: nome.anonascimento → ex: joao.2015
+  if (birthYear) {
+    const candidate = `${firstName}.${birthYear}`;
+    if (!(await isLoginTaken(candidate))) return candidate;
+  }
+
+  // Tentativa 3: nome.001, nome.002... → ex: joao.001
+  for (let i = 1; i <= 999; i++) {
+    const suffix = i.toString().padStart(3, "0");
+    const candidate = `${firstName}.${suffix}`;
+    if (!(await isLoginTaken(candidate))) return candidate;
+  }
+
+  // Fallback extremo (praticamente impossível chegar aqui)
+  return `${firstName}.${nanoid(6)}`;
+}
+
+// ============================================================================
+
 export const schoolsRouter = router({
   // Dashboard
   getDashboard: adminSchoolProcedure.query(async (opts: ProcedureOpts) => {
     const { ctx } = opts;
-
     const db = await ctx.getDb();
     if (!db) throw new Error("Database not available");
     if (!ctx.user) throw new Error("Usuário não autenticado");
@@ -50,7 +125,6 @@ export const schoolsRouter = router({
     };
   }),
 
-  // Configurações da escola
   getConfiguration: adminSchoolProcedure.query(async (opts: ProcedureOpts) => {
     const { ctx } = opts;
     const db = await ctx.getDb();
@@ -86,7 +160,6 @@ export const schoolsRouter = router({
     )
     .mutation(async (opts: ProcedureOpts) => {
       const { ctx, input } = opts;
-
       const db = await ctx.getDb();
       if (!db) throw new Error("Database not available");
       if (!ctx.user) throw new Error("Usuário não autenticado");
@@ -102,10 +175,8 @@ export const schoolsRouter = router({
         .execute();
     }),
 
-  // Listar alunos
   listStudents: adminSchoolProcedure.query(async (opts: ProcedureOpts) => {
     const { ctx } = opts;
-
     const db = await ctx.getDb();
     if (!db) throw new Error("Database not available");
     if (!ctx.user) throw new Error("Usuário não autenticado");
@@ -125,10 +196,8 @@ export const schoolsRouter = router({
       .execute();
   }),
 
-  // Listar professores
   listTeachers: adminSchoolProcedure.query(async (opts: ProcedureOpts) => {
     const { ctx } = opts;
-
     const db = await ctx.getDb();
     if (!db) throw new Error("Database not available");
     if (!ctx.user) throw new Error("Usuário não autenticado");
@@ -150,12 +219,10 @@ export const schoolsRouter = router({
     return userRows.filter((u) => u.role === "teacher");
   }),
 
-  // Obter aluno com anamnese
   getStudentWithAnamnesis: adminSchoolProcedure
     .input(z.object({ studentId: z.number() }))
     .query(async (opts: ProcedureOpts) => {
       const { ctx, input } = opts;
-
       const db = await ctx.getDb();
       if (!db) throw new Error("Database not available");
       if (!input) throw new Error("Input not provided");
@@ -221,7 +288,11 @@ export const schoolsRouter = router({
     if (!studentRows.length) return [];
 
     const studentMap = new Map(studentRows.map((s) => [s.id, s]));
-    const allLogs = await db.select().from(moderationLogs).orderBy(desc(moderationLogs.createdAt)).execute();
+    const allLogs = await db
+      .select()
+      .from(moderationLogs)
+      .orderBy(desc(moderationLogs.createdAt))
+      .execute();
 
     return allLogs
       .filter((l) => studentMap.has(l.studentId))
@@ -232,12 +303,10 @@ export const schoolsRouter = router({
       }));
   }),
 
-  // Liberar aluno bloqueado
   unlockStudent: adminSchoolProcedure
     .input(z.object({ studentId: z.number() }))
     .mutation(async (opts: ProcedureOpts) => {
       const { ctx, input } = opts;
-
       const db = await ctx.getDb();
       if (!db) throw new Error("Database not available");
       if (!input) throw new Error("Input not provided");
@@ -249,12 +318,10 @@ export const schoolsRouter = router({
         .execute();
     }),
 
-  // Bloquear aluno
   blockStudent: adminSchoolProcedure
     .input(z.object({ studentId: z.number() }))
     .mutation(async (opts: ProcedureOpts) => {
       const { ctx, input } = opts;
-
       const db = await ctx.getDb();
       if (!db) throw new Error("Database not available");
       if (!input) throw new Error("Input not provided");
@@ -266,17 +333,11 @@ export const schoolsRouter = router({
         .execute();
     }),
 
-      // ============================================================================
-  // CADASTRO DE ALUNO (NOVO)
   // ============================================================================
-
-    /**
-   * Cria um novo aluno com fluxo de aceite LGPD.
-   * Gera link de aceite para o responsável completar o cadastro.
-   */
+  // CADASTRO DE ALUNO
+  // ============================================================================
   createStudent: adminSchoolProcedure
     .input(z.object({
-      // Bloco 1
       fullName: z.string().min(3),
       birthDate: z.string(),
       series: z.enum(["1º_ano", "2º_ano", "3º_ano"]),
@@ -284,14 +345,10 @@ export const schoolsRouter = router({
       guardianName: z.string().min(3),
       guardianContactEmail: z.string().email(),
       guardianContactWhatsapp: z.string(),
-      
-      // Bloco 2
       conditions: z.array(z.string()),
       readingLevel: z.enum(["non_reader", "reads_with_difficulty", "reads_well"]),
       writingLevel: z.enum(["non_writer", "writes_with_difficulty", "writes_well"]),
       observations: z.string().optional(),
-      
-      // Bloco 3
       subjects: z.array(z.string()),
       enemEnabled: z.boolean(),
     }))
@@ -301,7 +358,6 @@ export const schoolsRouter = router({
       if (!db) throw new Error("Database not available");
       if (!ctx.user) throw new Error("Usuário não autenticado");
 
-      // Buscar escola do admin
       const school = await db
         .select()
         .from(schools)
@@ -311,11 +367,15 @@ export const schoolsRouter = router({
       if (!school.length) throw new Error("Escola não encontrada");
       const schoolId = school[0].id;
 
-      // Gerar token de aceite para o responsável
-      const acceptanceToken = nanoid(64);
-      const tokenExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
+      // ── Gera login único ───────────────────────────────────────────────────
+      const loginUsername = await generateUniqueLogin(db, input.fullName, input.birthDate);
+      console.log(`[createStudent] Login gerado: ${loginUsername}`);
 
-      // Criar usuário base do aluno (pendente até aceite)
+      // ── Token de aceite ────────────────────────────────────────────────────
+      const acceptanceToken = nanoid(64);
+      const tokenExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      // ── Criar usuário ──────────────────────────────────────────────────────
       const userInsert = await db
         .insert(users)
         .values({
@@ -324,10 +384,11 @@ export const schoolsRouter = router({
           email: null,
           role: "student",
           status: "pending_approval",
-          schoolId: schoolId,
+          schoolId,
           groupAccess: input.groupAccess,
-          firstName: input.fullName.split(' ')[0],
+          firstName: input.fullName.split(" ")[0],
           birthDate: input.birthDate,
+          loginUsername,                        // ✅ login gerado automaticamente
           activationToken: acceptanceToken,
           activationTokenExpires: tokenExpires,
         })
@@ -336,7 +397,7 @@ export const schoolsRouter = router({
 
       const userId = userInsert[0].id;
 
-      // Criar registro de aluno
+      // ── Criar aluno ────────────────────────────────────────────────────────
       const studentInsert = await db
         .insert(students)
         .values({
@@ -353,7 +414,7 @@ export const schoolsRouter = router({
 
       const studentId = studentInsert[0].id;
 
-      // Criar anamnese (Blocos 1 e 2 preenchidos, 3 e 4 pendentes)
+      // ── Criar anamnese ─────────────────────────────────────────────────────
       await db
         .insert(anamnesis)
         .values({
@@ -380,39 +441,84 @@ export const schoolsRouter = router({
         })
         .execute();
 
-      // Gerar link de aceite
+      // ── Link de aceite ─────────────────────────────────────────────────────
       const baseUrl = process.env.APP_URL || "http://localhost:5173";
-      const acceptanceLink = `${baseUrl}/aceite-aluno?token=${acceptanceToken}`;
+      const acceptanceLink = `${baseUrl}/aceite/${acceptanceToken}`;
 
-      console.log("Tentando enviar e-mail para:", input.guardianContactEmail);
-
-      // Enviar e-mail para o responsável
+      // ── Enviar e-mail ──────────────────────────────────────────────────────
       const emailResult = await sendStudentAcceptanceEmail({
         to: input.guardianContactEmail,
         studentName: input.fullName,
         guardianName: input.guardianName,
         acceptanceLink,
+        loginUsername, // ✅ passa o login gerado para o e-mail
       });
 
-        console.log("Resultado do e-mail:", emailResult); 
+      console.log("=== DEBUG CADASTRO ALUNO ===");
+      console.log("Login gerado:", loginUsername);
+      console.log("guardianEmail:", input.guardianContactEmail);
+      console.log("acceptanceLink:", acceptanceLink);
+      console.log("emailResult:", JSON.stringify(emailResult));
+      console.log("===========================");
 
       return {
         success: true,
         studentId,
         userId,
+        loginUsername,               // ✅ retorna o login para exibir na tela
         guardianEmail: input.guardianContactEmail,
         acceptanceLink,
         emailSent: emailResult.success,
         emailError: emailResult.error || null,
-        message: emailResult.success 
+        message: emailResult.success
           ? "Aluno criado. E-mail enviado ao responsável."
           : "Aluno criado. Falha no e-mail - use o link manual.",
       };
     }),
 
-  /** 
-   * Lista alunos com status de ativação (pendente ou ativo).
-   */
+  // ============================================================================
+  // REMOVER ALUNO
+  // ============================================================================
+  removeStudent: adminSchoolProcedure
+    .input(z.object({ studentId: z.number() }))
+    .mutation(async (opts: ProcedureOpts) => {
+      const { ctx, input } = opts;
+      const db = await ctx.getDb();
+      if (!db) throw new Error("Database not available");
+      if (!ctx.user) throw new Error("Usuário não autenticado");
+
+      const school = await db
+        .select()
+        .from(schools)
+        .where(eq(schools.adminId, ctx.user.id))
+        .limit(1)
+        .execute();
+
+      if (!school.length) throw new Error("Escola não encontrada");
+
+      const student = await db
+        .select()
+        .from(students)
+        .where(eq(students.id, input.studentId))
+        .limit(1)
+        .execute();
+
+      if (!student.length) throw new Error("Aluno não encontrado");
+      if (student[0].schoolId !== school[0].id)
+        throw new Error("Aluno não pertence à sua escola");
+
+      await db.delete(anamnesis).where(eq(anamnesis.studentId, input.studentId)).execute();
+      await db.delete(chatMessages).where(eq(chatMessages.studentId, input.studentId)).execute();
+      await db.delete(moderationLogs).where(eq(moderationLogs.studentId, input.studentId)).execute();
+      await db.delete(students).where(eq(students.id, input.studentId)).execute();
+      await db.delete(users).where(eq(users.id, student[0].userId)).execute();
+
+      return { success: true };
+    }),
+
+  // ============================================================================
+  // LISTAR ALUNOS COM STATUS
+  // ============================================================================
   listStudentsWithStatus: adminSchoolProcedure.query(async (opts: ProcedureOpts) => {
     const { ctx } = opts;
     const db = await ctx.getDb();
@@ -445,13 +551,15 @@ export const schoolsRouter = router({
       status: user.status,
       isActive: user.status === "active",
       isPending: user.status === "pending_approval",
+      loginUsername: user.loginUsername,        // ✅ incluído
+      lgpdAccepted: user.lgpdAccepted,          // ✅ incluído
+      lgpdAcceptedAt: user.lgpdAcceptedAt?.toISOString() ?? null, // ✅ incluído
       guardianEmail: anamnesis?.guardianContactEmail,
       guardianName: anamnesis?.guardianName,
       block3Completed: anamnesis?.block3Completed,
-      activationLink: user.activationToken 
+      activationLink: user.activationToken
         ? `${process.env.APP_URL || "http://localhost:5173"}/aceite/${user.activationToken}`
         : null,
     }));
   }),
-     
 });
