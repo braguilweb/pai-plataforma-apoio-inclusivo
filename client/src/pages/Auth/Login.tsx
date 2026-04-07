@@ -75,11 +75,28 @@ export default function Login() {
       onError: (err) => setError(err.message),
     });
 
-  // ── Mutation: Grupo 2 ─────────────────────────────────────────────────────
+    // ── Mutation: Grupo 2 ─────────────────────────────────────────────────────
   const { mutate: loginGroup2, isPending: isPending2 } =
     trpc.auth.loginGroup2.useMutation({
-      onSuccess: () => setLocation("/aluno/primeiro-acesso"),
-      onError:   (err) => setError(err.message),
+      onSuccess: async (data) => {
+        // Invalidar cache para garantir dados atualizados
+        try {
+          await utils.auth.me.invalidate();
+        } catch (err) {
+          console.error("Erro ao invalidar cache:", err);
+        }
+        
+        // Verificar se é primeiro acesso (sem persona/avatar)
+        // data deve conter informações do usuário logado
+        if (!data?.personaName || !data?.avatarStyle) {
+          // Primeiro acesso - escolher avatar/persona
+          setLocation("/aluno/primeiro-acesso");
+        } else {
+          // Já tem persona - ir direto para o chat
+          setLocation("/aluno/chat");
+        }
+      },
+      onError: (err) => setError(err.message),
     });
 
   // ── Handlers ──────────────────────────────────────────────────────────────

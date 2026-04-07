@@ -191,6 +191,62 @@ export const studentsRouter = router({
       }
     }),
 
+
+    /**
+   * Salva a persona/avatar escolhida pelo aluno no primeiro acesso.
+   */
+    /**
+   * Salva a persona/avatar escolhida pelo aluno no primeiro acesso.
+   */
+  savePersona: protectedProcedure
+  .input(
+    z.object({
+      personaName: z.enum([
+        "Guilherme",
+        "Professor Guilherme",
+        "Tio Gui",
+        "Tio Guilherme",
+        "Gui",
+      ]),
+      avatarStyle: z.enum(["manga", "pixar", "android"]),
+    })
+  )
+  .mutation(async (opts: ProcedureOpts) => {
+    const { ctx, input } = opts;
+    const db = await ctx.getDb();
+    if (!db) throw new Error("Database not available");
+    if (!ctx.user) throw new Error("Usuário não autenticado");
+
+    const studentRows = await db
+      .select()
+      .from(students)
+      .where(eq(students.userId, ctx.user.id))
+      .limit(1)
+      .execute();
+
+    if (!studentRows.length) {
+      throw new Error("Aluno não encontrado");
+    }
+
+    await db
+      .update(students)
+      .set({
+        personaName: input.personaName,
+        avatarStyle: input.avatarStyle,
+        firstAccessCompleted: true,
+        updatedAt: new Date(),
+      })
+      .where(eq(students.id, studentRows[0].id))
+      .execute();
+
+    return {
+      success: true,
+      message: "Persona salva com sucesso",
+      personaName: input.personaName,
+      avatarStyle: input.avatarStyle,
+    };
+  }),
+    
   // Adicione dentro do studentsRouter:
   //  — limpa o token aqui, após criar a senha
   setStudentPassword: publicProcedure
@@ -424,41 +480,49 @@ acceptLGPD: publicProcedure
   // PRIMEIRO ACESSO
   // ============================================================================
   completeFirstAccess: protectedProcedure
-    .input(
-      z.object({
-        personaName: z.enum(["Prof. Guilherme", "Gui", "Tio Gui", "Tio Guilherme"]),
-        avatarStyle: z.enum(["manga", "pixar", "android"]),
+  .input(
+    z.object({
+      personaName: z.enum([
+        "Guilherme",
+        "Professor Guilherme",
+        "Tio Gui",
+        "Tio Guilherme",
+        "Gui",
+      ]),
+      avatarStyle: z.enum(["manga", "pixar", "android"]),
+    })
+  )
+  .mutation(async (opts: ProcedureOpts) => {
+    const { ctx, input } = opts;
+    const db = await ctx.getDb();
+    if (!db) throw new Error("Database not available");
+    if (!ctx.user) throw new Error("Usuário não autenticado");
+    if (!input) throw new Error("Input not provided");
+
+    const studentRows = await db
+      .select()
+      .from(students)
+      .where(eq(students.userId, ctx.user.id))
+      .limit(1)
+      .execute();
+
+    if (!studentRows.length) throw new Error("Aluno não encontrado");
+
+    await db
+      .update(students)
+      .set({
+        personaName: input.personaName,
+        avatarStyle: input.avatarStyle,
+        firstAccessCompleted: true,
+        updatedAt: new Date(),
       })
-    )
-    .mutation(async (opts: ProcedureOpts) => {
-      const { ctx, input } = opts;
-      const db = await ctx.getDb();
-      if (!db) throw new Error("Database not available");
-      if (!ctx.user) throw new Error("Usuário não autenticado");
-      if (!input) throw new Error("Input not provided");
+      .where(eq(students.id, studentRows[0].id))
+      .execute();
 
-      const studentRows = await db
-        .select()
-        .from(students)
-        .where(eq(students.userId, ctx.user.id))
-        .limit(1)
-        .execute();
+    return { success: true };
+  }),
 
-      if (!studentRows.length) throw new Error("Aluno não encontrado");
-
-      await db
-        .update(students)
-        .set({
-          personaName: input.personaName,
-          avatarStyle: input.avatarStyle,
-          updatedAt: new Date(),
-        })
-        .where(eq(students.id, studentRows[0].id))
-        .execute();
-
-      return { success: true };
-    }),
-
+  
   // ============================================================================
   // PERFIL DO ALUNO PARA CHAT
   // ============================================================================

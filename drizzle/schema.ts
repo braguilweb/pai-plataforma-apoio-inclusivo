@@ -243,6 +243,9 @@ export const students = pgTable("students", {
   /** Nome da persona/avatar do aluno na plataforma */
   personaName: varchar("personaName", { length: 255 }),
 
+   /** Indica se o aluno já concluiu a configuração de primeiro acesso */
+  firstAccessCompleted: boolean("firstAccessCompleted").default(false).notNull(), 
+
   /** Estilo do avatar escolhido */
   avatarStyle: avatarStyleEnum("avatarStyle"),
 

@@ -9,7 +9,7 @@ import {
   validatePasswordStrength,
 } from "../auth-helper";
 import { getDb } from "../db";
-import { users, schools } from "../../drizzle/schema";
+import { users, schools, students } from "../../drizzle/schema";
 import { eq, and, gt } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
@@ -157,7 +157,7 @@ export const authRouter = router({
    * Login para alunos do Grupo 2 (não leem nem escrevem).
    * Valida primeiro nome + data de nascimento e cria sessão autenticada.
    */
-  loginGroup2: publicProcedure
+    loginGroup2: publicProcedure
     .input(
       z.object({
         firstName: z.string().min(2),
@@ -170,36 +170,50 @@ export const authRouter = router({
         input.birthDate
       );
 
-      if (!result.success) {
+      if (!result.success || !result.userId) {
         throw new TRPCError({
           code: "UNAUTHORIZED",
           message: result.error || "Dados de acesso inválidos",
         });
       }
 
-      try {
-        const db = await getDb();
-        if (db && result.userId) {
-          const found = await db
-            .select()
-            .from(users)
-            .where(eq(users.id, result.userId))
-            .limit(1);
-
-          if (found.length > 0 && found[0].openId) {
-            await createAuthSession(ctx, found[0].openId, found[0].name || "");
-          }
-        }
-      } catch (err) {
-        console.error(
-          "[auth] Falha ao criar cookie de sessão após loginGroup2:",
-          err
-        );
+      const db = await getDb();
+      if (!db) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Banco de dados indisponível",
+        });
       }
 
+      const found = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, result.userId))
+        .limit(1);
+
+      const user = found[0];
+
+      if (!user) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Usuário não encontrado na base de dados",
+        });
+      }
+
+      // Cria a sessão com o usuário encontrado
+      if (user.openId) {
+        await createAuthSession(ctx, user.openId, user.name || "");
+      }
+
+      // Agora o TypeScript sabe que 'user' existe aqui.
+      // O 'as any' é usado para campos que podem não estar definidos no tipo do Schema
       return {
         success: true,
-        userId: result.userId,
+        userId: user.id,
+        role: user.role,
+        name: user.name,
+        personaName: (user as any).personaName || null,
+        avatarStyle: (user as any).avatarStyle || null,
       };
     }),
 
@@ -527,8 +541,47 @@ loginAdmin: publicProcedure
    * Retorna os dados do usuário autenticado na sessão atual.
    * Retorna null se não houver sessão ativa.
    */
-  me: publicProcedure.query(({ ctx }) => {
-    return ctx.user || null;
+  me: publicProcedure.query(async ({ ctx }) => {
+  if (!ctx.user) return null;
+
+  const db = await getDb();
+  if (!db) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Banco de dados indisponível",
+    });
+  }
+
+  const foundUser = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, ctx.user.id))
+    .limit(1);
+
+  const user = foundUser[0];
+
+  if (!user) return null;
+
+  // Para usuários que não são alunos, retorna normalmente
+  if (user.role !== "student") {
+    return user;
+  }
+
+  // Se for aluno, busca os dados complementares na tabela students
+  const foundStudent = await db
+    .select()
+    .from(students)
+    .where(eq(students.userId, user.id))
+    .limit(1);
+
+  const student = foundStudent[0];
+
+  return {
+    ...user,
+    firstAccessCompleted: student?.firstAccessCompleted ?? false,
+    personaName: student?.personaName ?? null,
+    avatarStyle: student?.avatarStyle ?? null,
+  };
   }),
 
   // ==========================================================================

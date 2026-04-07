@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";
 
+
 // ============================================================================
 // PÁGINAS PÚBLICAS
 // Acessíveis sem autenticação
@@ -94,20 +95,26 @@ interface ProtectedRouteProps {
   allowedRoles: string[];
 }
 
+// No ProtectedRoute, dentro do seu App.tsx
 function ProtectedRoute({ component: Component, allowedRoles }: ProtectedRouteProps) {
   const { user, loading } = useAuth();
 
-  // Enquanto valida a sessão, evita redirecionar prematuramente para /login
-  // (isso podia acontecer logo após o login, antes do `auth.me` resolver).
   if (loading) return <LoadingPage />;
-
-  // Usuário não autenticado: redireciona para login
   if (!user) return <Redirect to="/login" />;
-
-  // Papel não autorizado para esta rota: exibe 404
   if (!allowedRoles.includes(user.role)) return <NotFound />;
 
-  // Autenticado e autorizado: renderiza a página
+  // Se for aluno, verifica se ele tem personaName ou avatarStyle (o que indica que ele já passou pelo primeiro acesso)
+  // Como o 'user' é o objeto base, se você tiver acesso ao perfil do estudante aqui, verifique-o:
+  const userData = user as any;
+
+if (
+  user.role === "student" &&
+  userData.firstAccessCompleted === false &&
+  window.location.pathname !== "/aluno/primeiro-acesso"
+) {
+  return <Redirect to="/aluno/primeiro-acesso" />;
+}
+
   return <Component />;
 }
 
