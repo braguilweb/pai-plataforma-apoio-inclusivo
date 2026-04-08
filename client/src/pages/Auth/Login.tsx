@@ -63,18 +63,26 @@ export default function Login() {
 
   // ── Mutation: Grupo 1 ─────────────────────────────────────────────────────
   const { mutate: loginGroup1, isPending: isPending1 } =
-    trpc.auth.loginGroup1.useMutation({
-      onSuccess: async () => {
-        try {
-          await utils.auth.me.invalidate();
-        } catch (err) {
-          console.error("Erro ao invalidar cache:", err);
-        }
-        setLocation("/");
-      },
-      onError: (err) => setError(err.message),
-    });
+  trpc.auth.loginGroup1.useMutation({
+    onSuccess: async (data) => {
+      try {
+        await utils.auth.me.invalidate();
+      } catch (err) {
+        console.error("Erro ao invalidar cache:", err);
+      }
+      
+      // ✅ VERIFICAR PRIMEIRO ACESSO (igual ao Grupo 2)
+      if (!data?.personaName || !data?.avatarStyle) {
+        setLocation("/aluno/primeiro-acesso");
+      } else {
+        setLocation("/aluno/chat");
+      }
+    },
+    onError: (err) => setError(err.message),
+  });
 
+
+  
     // ── Mutation: Grupo 2 ─────────────────────────────────────────────────────
   const { mutate: loginGroup2, isPending: isPending2 } =
     trpc.auth.loginGroup2.useMutation({

@@ -101,52 +101,76 @@ export const authRouter = router({
    * Valida as credenciais e cria a sessão autenticada via cookie.
    */
   loginGroup1: publicProcedure
-    .input(
-      z.object({
-        username: z.string().min(3),
-        password: z.string().min(6),
-      })
-    )
-    .mutation(async ({ input, ctx }) => {
-      const result = await authenticateGroup1Student(
-        input.username,
-        input.password
-      );
+  .input(
+    z.object({
+      username: z.string().min(3),
+      password: z.string().min(6),
+    })
+  )
+  .mutation(async ({ input, ctx }) => {
+    const result = await authenticateGroup1Student(
+      input.username,
+      input.password
+    );
 
-      if (!result.success) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: result.error || "Credenciais inválidas",
-        });
-      }
+    if (!result.success) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: result.error || "Credenciais inválidas",
+      });
+    }
 
-      // Criar cookie de sessão para que as próximas requisições
-      // já incluam o usuário autenticado
-      try {
-        const db = await getDb();
-        if (db && result.userId) {
-          const found = await db
-            .select()
-            .from(users)
-            .where(eq(users.id, result.userId))
-            .limit(1);
+    // Criar cookie de sessão
+    try {
+      const db = await getDb();
+      if (db && result.userId) {
+        const found = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, result.userId))
+          .limit(1);
 
-          if (found.length > 0 && found[0].openId) {
-            await createAuthSession(ctx, found[0].openId, found[0].name || "");
-          }
+        if (found.length > 0 && found[0].openId) {
+          await createAuthSession(ctx, found[0].openId, found[0].name || "");
         }
-      } catch (err) {
-        console.error(
-          "[auth] Falha ao criar cookie de sessão após loginGroup1:",
-          err
-        );
-      }
 
-      return {
-        success: true,
-        userId: result.userId,
-      };
-    }),
+        // ✅ BUSCAR DADOS DO STUDENT para verificar primeiro acesso
+        const student = await db
+          .select({
+            firstAccessCompleted: students.firstAccessCompleted,
+            personaName: students.personaName,
+            avatarStyle: students.avatarStyle,
+          })
+          .from(students)
+          .where(eq(students.userId, result.userId))
+          .limit(1)
+          .then(rows => rows[0] || null);
+
+        return {
+          success: true,
+          userId: result.userId,
+          firstAccessCompleted: student?.firstAccessCompleted ?? false,
+          personaName: student?.personaName ?? null,
+          avatarStyle: student?.avatarStyle ?? null,
+        };
+      }
+    } catch (err) {
+      console.error(
+        "[auth] Falha ao criar cookie de sessão após loginGroup1:",
+        err
+      );
+    }
+
+    // Fallback se der erro no try
+    return {
+      success: true,
+      userId: result.userId,
+      firstAccessCompleted: false,
+      personaName: null,
+      avatarStyle: null,
+    };
+  }),
+  
 
   // ==========================================================================
   // LOGIN — GRUPO 2 (não-leitores/não-escritores)
